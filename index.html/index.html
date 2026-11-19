@@ -253,8 +253,12 @@ async function loadCloud(){
   try{localStorage.setItem('financas:v2',JSON.stringify(S))}catch(e){}
 }
 var S=load(),mes=hoje().slice(0,7),view='geral',F={q:'',tipo:'',cat:''},editId=null,lastDel=null,tmr;
-var supabaseConfigured=window.ROMEIRO_SUPABASE_URL&&window.ROMEIRO_SUPABASE_ANON_KEY&&
-  window.ROMEIRO_SUPABASE_URL.indexOf('https://')===0&&window.ROMEIRO_SUPABASE_ANON_KEY.indexOf('COLE_AQUI')!==0;
+var supabaseConfigured = !!(
+  window.ROMEIRO_SUPABASE_URL &&
+  window.ROMEIRO_SUPABASE_URL.startsWith('https://') &&
+  window.ROMEIRO_SUPABASE_ANON_KEY &&
+  !window.ROMEIRO_SUPABASE_ANON_KEY.startsWith('COLE_')
+);
 var sb=supabaseConfigured&&window.supabase?window.supabase.createClient(window.ROMEIRO_SUPABASE_URL,window.ROMEIRO_SUPABASE_ANON_KEY):null;
 var authMode='login';
 function authMessage(msg){$('#authError').textContent=msg||''}
