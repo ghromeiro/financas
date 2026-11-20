@@ -14,6 +14,7 @@
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.5}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
+button:disabled{opacity:.6;cursor:not-allowed}
 :focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 [hidden]{display:none!important}
 .app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
@@ -37,7 +38,7 @@ header{display:flex;justify-content:space-between;align-items:center;gap:12px;fl
 .btn{border:0;border-radius:10px;padding:11px 18px;font-weight:600;min-height:44px}
 .btn.primary{background:var(--blue);color:#fff}
 .btn.ghost{background:var(--paper);border:1px solid var(--line)}
-.btn:hover{filter:brightness(.94)}
+.btn:hover:not(:disabled){filter:brightness(.94)}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:20px}
 .card h2{font-size:.95rem;font-weight:600;margin:0 0 14px}
 .hero{background:var(--blue);color:#fff;border-radius:18px;padding:28px;margin-bottom:16px}
@@ -92,6 +93,12 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 16px;border-radius:10px;display:flex;gap:14px;align-items:center;font-size:.9rem;z-index:9}
 #toast button{background:none;border:0;color:#9db0ff;font-weight:600}
 
+.ia{margin-bottom:16px;padding:16px}
+.ia label{display:block;font-size:.85rem;font-weight:600;margin-bottom:8px}
+.ia-row{display:flex;gap:10px;flex-wrap:wrap}
+.ia-row input{flex:1 1 240px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;min-height:44px;background:var(--paper)}
+.ia .muted{margin-top:8px;min-height:1.3em}
+
 .auth-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--bg)}
 .auth-card{width:min(440px,100%);background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:28px}
 .auth-card h1{font-size:1.35rem;margin:0 0 6px}.auth-card p{color:var(--muted);font-size:.9rem;margin:0 0 22px}
@@ -115,7 +122,7 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
     <p id="authSubtitle">Acesse seu controle financeiro de qualquer dispositivo.</p>
     <form id="authForm">
       <div class="f"><label for="authEmail">E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div>
-      <div class="f"><label for="authPassword">Senha</label><input id="authPassword" type="password" minlength="6" autocomplete="current-password" required placeholder="Mínimo de 6 caracteres"></div>
+      <div class="f"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password" required placeholder="Sua senha"></div>
       <div class="auth-actions">
         <button class="btn primary" id="authSubmit" type="submit">Entrar</button>
         <button class="btn ghost" id="authToggle" type="button">Criar conta</button>
@@ -146,6 +153,15 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
     <div class="month"><button id="mPrev" aria-label="Mês anterior">‹</button><strong id="mLabel"></strong><button id="mNext" aria-label="Próximo mês">›</button></div>
     <div id="userArea"><span id="userEmail"></span><button class="btn ghost" id="bLogout" type="button">Sair</button></div><button class="btn primary" id="bNovo">Novo lançamento</button>
   </header>
+
+  <form id="iaForm" class="card ia" autocomplete="off">
+    <label for="iaTexto">Escreva o que aconteceu</label>
+    <div class="ia-row">
+      <input id="iaTexto" maxlength="200" placeholder="Ex.: gastei 40 no mercado ontem">
+      <button class="btn primary" id="iaBtn" type="submit">Preencher com IA</button>
+    </div>
+    <div class="muted" id="iaMsg" role="status"></div>
+  </form>
 
   <section id="v-geral">
     <div class="hero"><small>Saldo do mês</small><div class="big" id="hSaldo">R$ 0,00</div><small id="hSub"></small></div>
@@ -193,7 +209,7 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-/* Configure com os dados públicos do seu projeto Supabase. Nunca use a chave service_role aqui. */
+/* Dados públicos do projeto Supabase. Nunca use a chave service_role aqui. */
 window.ROMEIRO_SUPABASE_URL = "https://oxxnnpintnewogeloncb.supabase.co";
 window.ROMEIRO_SUPABASE_ANON_KEY = "sb_publishable_Aa97p6JylMmXEz_5kdfMbg_T7IJC-7B";
 </script>
@@ -215,12 +231,17 @@ function load(){try{var d=JSON.parse(localStorage.getItem('financas:v2'));if(d&&
   var o=JSON.parse(localStorage.getItem('financas:v1'));if(Array.isArray(o))return{items:o.map(function(i){i.id=String(i.id);return i}),metas:{}}}catch(e){}
   return{items:[],metas:{}}}
 var cloudTimer=null,cloudReady=false,currentUser=null;
+function limparLocal(){
+  S={items:[],metas:{}};
+  try{localStorage.removeItem('financas:v2');localStorage.removeItem('financas:v1');localStorage.removeItem('financas:owner')}catch(e){}
+}
 function save(){
-  try{localStorage.setItem('financas:v2',JSON.stringify(S))}catch(e){}
+  try{localStorage.setItem('financas:v2',JSON.stringify(S));if(currentUser)localStorage.setItem('financas:owner',currentUser.id)}catch(e){}
   if(cloudReady&&currentUser){clearTimeout(cloudTimer);cloudTimer=setTimeout(syncCloud,500)}
 }
 async function syncCloud(){
   if(!cloudReady||!currentUser)return;
+  cloudTimer=null;
   try{
     var rows=S.items.map(function(i){return{id:String(i.id),user_id:currentUser.id,type:i.tipo,amount:i.valor,date:i.data,description:i.desc,category:i.cat}});
     var existing=await sb.from('finance_transactions').select('id').eq('user_id',currentUser.id);
@@ -239,7 +260,8 @@ async function syncCloud(){
   }catch(err){console.error('Erro ao sincronizar:',err);toast('Não foi possível sincronizar. Verifique sua conexão.')}
 }
 async function loadCloud(){
-  var localCopy=S;
+  var localCopy=S,owner=null;
+  try{owner=localStorage.getItem('financas:owner')}catch(e){}
   var tr=await sb.from('finance_transactions').select('*').eq('user_id',currentUser.id);
   if(tr.error)throw tr.error;
   var bu=await sb.from('finance_budgets').select('*').eq('user_id',currentUser.id);
@@ -247,10 +269,11 @@ async function loadCloud(){
   var remoteItems=(tr.data||[]).map(function(r){return{id:String(r.id),tipo:r.type,valor:Number(r.amount),data:r.date,desc:r.description,cat:r.category}});
   S={items:remoteItems,metas:{}};
   (bu.data||[]).forEach(function(r){S.metas[r.category]=Number(r.amount)});
-  if(!remoteItems.length&&localCopy.items&&localCopy.items.length&&confirm('Encontramos '+localCopy.items.length+' lançamentos salvos somente neste navegador. Deseja importar esses dados para esta conta?')){
+  /* Só oferece importar dados locais se eles não pertencem a outra conta */
+  if(!remoteItems.length&&localCopy.items&&localCopy.items.length&&(!owner||owner===currentUser.id)&&confirm('Encontramos '+localCopy.items.length+' lançamentos salvos somente neste navegador. Deseja importar esses dados para esta conta?')){
     S=localCopy;cloudReady=true;await syncCloud();
   }
-  try{localStorage.setItem('financas:v2',JSON.stringify(S))}catch(e){}
+  try{localStorage.setItem('financas:v2',JSON.stringify(S));localStorage.setItem('financas:owner',currentUser.id)}catch(e){}
 }
 var S=load(),mes=hoje().slice(0,7),view='geral',F={q:'',tipo:'',cat:''},editId=null,lastDel=null,tmr;
 var supabaseConfigured = !!(
@@ -262,7 +285,26 @@ var supabaseConfigured = !!(
 var sb=supabaseConfigured&&window.supabase?window.supabase.createClient(window.ROMEIRO_SUPABASE_URL,window.ROMEIRO_SUPABASE_ANON_KEY):null;
 var authMode='login';
 function authMessage(msg){$('#authError').textContent=msg||''}
-function setAuthMode(mode){authMode=mode;$('#authTitle').textContent=mode==='signup'?'Crie sua conta':'Entre na sua conta';$('#authSubtitle').textContent=mode==='signup'?'Cadastre-se para salvar seus dados na nuvem.':'Acesse seu controle financeiro de qualquer dispositivo.';$('#authSubmit').textContent=mode==='signup'?'Criar conta':'Entrar';$('#authToggle').textContent=mode==='signup'?'Já tenho conta':'Criar conta';$('#authPassword').autocomplete=mode==='signup'?'new-password':'current-password';authMessage('')}
+function msgErro(m){
+  m=String(m||'');
+  if(/Invalid login credentials/i.test(m))return'E-mail ou senha incorretos.';
+  if(/Email not confirmed/i.test(m))return'Confirme seu e-mail antes de entrar.';
+  if(/already registered/i.test(m))return'Este e-mail já tem cadastro. Tente entrar.';
+  if(/rate limit|too many|security purposes/i.test(m))return'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+  if(/Password should|weak/i.test(m))return'Senha fraca. Use pelo menos 8 caracteres.';
+  return m||'Não foi possível autenticar.';
+}
+function setAuthMode(mode){
+  authMode=mode;
+  $('#authTitle').textContent=mode==='signup'?'Crie sua conta':'Entre na sua conta';
+  $('#authSubtitle').textContent=mode==='signup'?'Cadastre-se para salvar seus dados na nuvem.':'Acesse seu controle financeiro de qualquer dispositivo.';
+  $('#authSubmit').textContent=mode==='signup'?'Criar conta':'Entrar';
+  $('#authToggle').textContent=mode==='signup'?'Já tenho conta':'Criar conta';
+  $('#authPassword').autocomplete=mode==='signup'?'new-password':'current-password';
+  $('#authPassword').minLength=mode==='signup'?8:1;
+  $('#authPassword').placeholder=mode==='signup'?'Mínimo de 8 caracteres':'Sua senha';
+  authMessage('');
+}
 function showApp(user){currentUser=user;$('#authScreen').hidden=true;$('#financeApp').hidden=false;$('#userEmail').textContent=user.email||''}
 async function startSession(session){
   if(!session){currentUser=null;cloudReady=false;$('#financeApp').hidden=true;$('#authScreen').hidden=false;return}
@@ -280,24 +322,34 @@ $('#authForm').addEventListener('submit',async function(e){
     if(result.error)throw result.error;
     if(authMode==='signup'&&!result.data.session){authMessage('Cadastro iniciado! Confira seu e-mail para confirmar a conta e depois faça login.')}
     else if(result.data.session)await startSession(result.data.session);
-  }catch(err){authMessage(err.message||'Não foi possível autenticar.')}
+  }catch(err){authMessage(msgErro(err.message))}
   finally{$('#authSubmit').disabled=false}
 });
 $('#authForgot').onclick=async function(){
   if(!sb){authMessage('Configure primeiro o Supabase.');return}
   var email=$('#authEmail').value.trim();if(!email){authMessage('Digite seu e-mail para receber o link de recuperação.');return}
   var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
-  authMessage(r.error?r.error.message:'Se o e-mail estiver cadastrado, você receberá um link de recuperação.');
+  authMessage(r.error?msgErro(r.error.message):'Se o e-mail estiver cadastrado, você receberá um link de recuperação.');
 };
 $('#bLogout').onclick=async function(){
   try{if(cloudReady&&currentUser)await syncCloud();if(sb)await sb.auth.signOut()}catch(err){console.error('Erro ao sair:',err)}
-  cloudReady=false;currentUser=null;
-  try{localStorage.removeItem('financas:v2');localStorage.removeItem('financas:v1')}catch(e){}
+  cloudReady=false;currentUser=null;limparLocal();
   $('#financeApp').hidden=true;$('#authScreen').hidden=false;setAuthMode('login')
 };
-if(sb){sb.auth.onAuthStateChange(function(event,session){if(event==='SIGNED_IN'&&session&&!currentUser)startSession(session);if(event==='SIGNED_OUT'){cloudReady=false;currentUser=null;$('#financeApp').hidden=true;$('#authScreen').hidden=false}});sb.auth.getSession().then(function(r){if(r.data&&r.data.session)startSession(r.data.session);else{$('#financeApp').hidden=true;$('#authScreen').hidden=false}})}
-else{$('#financeApp').hidden=true;$('#authScreen').hidden=false;authMessage('Para ativar login e nuvem, configure as credenciais do Supabase no arquivo.')}
-
+if(sb){
+  sb.auth.onAuthStateChange(function(event,session){
+    if(event==='PASSWORD_RECOVERY'){
+      var np=prompt('Digite sua nova senha (mínimo de 8 caracteres):');
+      if(np&&np.length>=8){sb.auth.updateUser({password:np}).then(function(r){toast(r.error?msgErro(r.error.message):'Senha atualizada com sucesso.')})}
+      else if(np){toast('A senha precisa ter pelo menos 8 caracteres.')}
+    }
+    if(event==='SIGNED_IN'&&session&&!currentUser)startSession(session);
+    if(event==='SIGNED_OUT'){cloudReady=false;currentUser=null;limparLocal();$('#financeApp').hidden=true;$('#authScreen').hidden=false}
+  });
+  sb.auth.getSession().then(function(r){if(r.data&&r.data.session)startSession(r.data.session);else{$('#financeApp').hidden=true;$('#authScreen').hidden=false}})
+}else{$('#financeApp').hidden=true;$('#authScreen').hidden=false;authMessage('Para ativar login e nuvem, configure as credenciais do Supabase no arquivo.')}
+/* Se a aba for fechada ou escondida logo depois de editar, envia na hora */
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&cloudTimer&&cloudReady&&currentUser){clearTimeout(cloudTimer);syncCloud()}});
 
 function sums(m){var r={e:0,s:0,by:{}};S.items.forEach(function(i){if(i.data.slice(0,7)!==m)return;
   if(i.tipo==='entrada')r.e+=i.valor;else{r.s+=i.valor;r.by[i.cat]=(r.by[i.cat]||0)+i.valor}});return r}
@@ -336,7 +388,7 @@ function lanc(){
   var q=F.q.toLowerCase(),l=S.items.filter(function(i){return i.data.slice(0,7)===mes&&(!F.tipo||i.tipo===F.tipo)&&(!F.cat||i.cat===F.cat)&&(!q||i.desc.toLowerCase().indexOf(q)>-1)})
    .sort(function(a,b){return b.data.localeCompare(a.data)});
   $('#lista').innerHTML=l.length?l.map(function(i){return'<div class="row"><div><div class="t">'+esc(i.desc)+'</div><div class="m"><i style="background:'+(CATS[i.cat]||'#94a3b8')+'"></i>'+esc(i.cat)+', '+fdata(i.data)+'</div></div>'+
-   '<div class="a '+(i.tipo==='entrada'?'in':'out')+'">'+(i.tipo==='entrada'?'+ ':'− ')+brl.format(i.valor)+'</div><div class="x"><button class="link" data-edit="'+i.id+'">Editar</button><button class="link d" data-del="'+i.id+'">Apagar</button></div></div>'}).join(''):
+   '<div class="a '+(i.tipo==='entrada'?'in':'out')+'">'+(i.tipo==='entrada'?'+ ':'− ')+brl.format(i.valor)+'</div><div class="x"><button class="link" data-edit="'+esc(i.id)+'">Editar</button><button class="link d" data-del="'+esc(i.id)+'">Apagar</button></div></div>'}).join(''):
    '<p class="muted">Nenhum lançamento neste filtro. Use “Novo lançamento” para adicionar.</p>';
 }
 
@@ -402,10 +454,36 @@ $('#form').addEventListener('submit',function(e){
   save();$('#dlg').close();R();toast(editId?'Alterações salvas.':'Lançamento adicionado.');
 });
 
+/* IA: transforma uma frase em lançamento e abre o formulário para você confirmar */
+$('#iaForm').addEventListener('submit',async function(e){
+  e.preventDefault();
+  var texto=$('#iaTexto').value.trim(),msg=$('#iaMsg');
+  if(!texto){msg.textContent='Escreva uma frase, por exemplo: gastei 40 no mercado.';return}
+  if(!sb||!currentUser||!cloudReady){msg.textContent='Faça login para usar a IA.';return}
+  $('#iaBtn').disabled=true;msg.textContent='Entendendo sua frase...';
+  try{
+    var r=await sb.functions.invoke('parse-lancamento',{body:{texto:texto,hoje:hoje()}});
+    var o=r.data;
+    if(r.error||!o||o.erro){
+      var detalhe=o&&o.erro;
+      if(!detalhe&&r.error&&r.error.context&&r.error.context.json){try{var j=await r.error.context.json();detalhe=j.erro}catch(x){}}
+      throw new Error(detalhe||'Não foi possível usar a IA agora.');
+    }
+    openD();
+    $('#dTitulo').textContent='Confirme o lançamento';
+    $('#fVal').value=o.valor;$('#fDesc').value=o.desc;$('#fCt').value=o.cat;$('#fData').value=o.data;
+    (o.tipo==='entrada'?$('#tE'):$('#tS')).checked=true;
+    $('#iaTexto').value='';msg.textContent='Confira os dados e confirme.';
+  }catch(err){msg.textContent=err.message||'Algo deu errado. Tente de novo.'}
+  finally{$('#iaBtn').disabled=false}
+});
+
 $('#bCsv').onclick=function(){
   if(!S.items.length){toast('Não há lançamentos para exportar.');return}
+  /* Prefixo ' evita que o Excel execute fórmulas digitadas na descrição */
+  function seguro(t){t=String(t);return /^[=+\-@\t\r]/.test(t)?"'"+t:t}
   var rows=['Data;Tipo;Categoria;Descrição;Valor'].concat(S.items.slice().sort(function(a,b){return a.data.localeCompare(b.data)}).map(function(i){
-    return[fdata(i.data),i.tipo==='entrada'?'Entrada':'Saída',i.cat,'"'+i.desc.replace(/"/g,'""')+'"',String(i.valor).replace('.',',')].join(';')}));
+    return[fdata(i.data),i.tipo==='entrada'?'Entrada':'Saída',i.cat,'"'+seguro(i.desc).replace(/"/g,'""')+'"',String(i.valor).replace('.',',')].join(';')}));
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv;charset=utf-8'}));
   a.download='financas.csv';document.body.appendChild(a);a.click();a.remove();
 };
@@ -421,6 +499,7 @@ $('#bDemo').onclick=function(){
 
 Object.keys(CATS).forEach(function(k){['#fCt','#fCat'].forEach(function(id){var o=document.createElement('option');o.value=k;o.textContent=k;$(id).appendChild(o)})});
 var all=document.createElement('option');all.value='';all.textContent='Todas as categorias';$('#fCat').insertBefore(all,$('#fCat').firstChild);$('#fCat').value='';
+setAuthMode('login');
 R();
 })();
 </script>
