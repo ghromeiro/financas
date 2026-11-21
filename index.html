@@ -439,7 +439,7 @@ $('#authForgot').onclick=async function(){
   authMessage(r.error?msgErro(r.error.message):'Se o e-mail estiver cadastrado, você receberá um link de recuperação.');
 };
 $('#bLogout').onclick=async function(){
-  try{if(cloudReady&&currentUser)await syncCloud();if(sb)await sb.auth.signOut()}catch(err){console.error('Erro ao sair:',err)}
+  try{if(cloudReady&&currentUser&&cloudTimer){clearTimeout(cloudTimer);await syncCloud()}if(sb)await sb.auth.signOut()}catch(err){console.error('Erro ao sair:',err)}
   cloudReady=false;currentUser=null;limparLocal();
   $('#financeApp').hidden=true;$('#authScreen').hidden=false;setAuthMode('login')
 };
