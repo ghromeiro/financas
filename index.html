@@ -190,7 +190,7 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
   </nav>
   <div class="foot">
     <button id="bManage">Gerenciar assinatura</button>
-    <button id="bDemo">Carregar dados de exemplo</button>
+    <button id="bDemo" hidden>Carregar dados de exemplo</button>
     <button id="bCsv">Exportar planilha (CSV)</button>
     <button id="bClear" class="danger">Apagar todos os dados</button>
   </div>
@@ -411,7 +411,9 @@ async function startSession(session){
     await lerAssinatura();
     if(!ativa()&&retorno==='ok')await aguardarAssinatura();
     if(!ativa()){mostrarPaywall();return}
-    await loadCloud();cloudReady=true;$('#financeApp').hidden=false;R();
+    await loadCloud();cloudReady=true;
+    $('#bDemo').hidden=!(currentUser.app_metadata&&currentUser.app_metadata.dev===true);
+    $('#financeApp').hidden=false;R();
     if(retorno==='ok')toast('Assinatura confirmada! Bem-vindo(a).');
     limparUrl();
   }catch(err){console.error(err);cloudReady=false;currentUser=null;assin=null;$('#financeApp').hidden=true;$('#payScreen').hidden=true;$('#authScreen').hidden=false;authMessage('Erro ao carregar seus dados. Confira as tabelas e políticas RLS do Supabase.')}
