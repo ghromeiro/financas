@@ -118,6 +118,17 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
 
 @media(max-width:860px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px}nav{flex-direction:row}.foot{margin:0;flex-direction:row;flex-wrap:wrap;width:100%}.kpis,.two{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:no-preference){.btn,nav button{transition:filter .15s,background .15s}}
+
+.plans{position:relative;display:grid;gap:10px;margin-bottom:14px}
+.plans input{position:absolute;opacity:0;width:1px;height:1px}
+.plan{display:grid;gap:2px;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer}
+.plan strong{font-size:1rem}
+.plan .price{color:var(--blue);font-weight:600}
+.plan small{color:var(--muted);font-size:.8rem}
+.plans input:checked+label{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue)}
+.plans input:focus-visible+label{outline:3px solid var(--blue);outline-offset:2px}
+.pay-actions{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.pay-links{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 </style>
 </head>
 <body>
@@ -141,6 +152,34 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
   </div>
 </section>
 
+<section class="auth-screen" id="payScreen" hidden>
+  <div class="auth-card">
+    <div class="brand" style="margin-bottom:22px"><span class="logo">ri</span>Romeiro Finance</div>
+    <h1>Assine para continuar</h1>
+    <p>Conta: <span id="payEmail"></span></p>
+    <div class="seg" role="radiogroup" aria-label="Cobrança">
+      <input type="radio" name="intervalo" id="iM" value="mensal" checked><label for="iM">Mensal</label>
+      <input type="radio" name="intervalo" id="iA" value="anual"><label for="iA">Anual</label>
+    </div>
+    <div class="plans" role="radiogroup" aria-label="Plano">
+      <input type="radio" name="plano" id="pB" value="basico" checked>
+      <label for="pB" class="plan"><strong>Básico</strong><span class="price" id="prB"></span><small>Lançamentos, categorias, metas, gráficos e exportação em CSV.</small></label>
+      <input type="radio" name="plano" id="pP" value="premium">
+      <label for="pP" class="plan"><strong>Premium</strong><span class="price" id="prP"></span><small>Tudo do Básico, mais assistente de IA e Alertas e dicas.</small></label>
+    </div>
+    <div class="pay-actions">
+      <button class="btn primary" id="payBtn" type="button">Começar 7 dias grátis</button>
+      <button class="btn ghost" id="payManage" type="button" hidden>Gerenciar assinatura</button>
+    </div>
+    <div class="auth-note" id="payTrial">7 dias grátis na primeira assinatura. O cartão é pedido agora e a cobrança só começa depois do teste. Cancele quando quiser.</div>
+    <div class="auth-note" id="payMsg" role="status"></div>
+    <div class="pay-links">
+      <button class="link" id="payRecheck" type="button">Já assinei, verificar</button>
+      <button class="link" id="payLogout" type="button">Sair</button>
+    </div>
+  </div>
+</section>
+
 <div class="app" id="financeApp" hidden>
 <aside>
   <div class="brand"><span class="logo">ri</span>Romeiro Finance</div>
@@ -150,6 +189,7 @@ dialog h2{margin:0 0 16px;font-size:1.1rem}
     <button data-v="metas">Metas</button>
   </nav>
   <div class="foot">
+    <button id="bManage">Gerenciar assinatura</button>
     <button id="bDemo">Carregar dados de exemplo</button>
     <button id="bCsv">Exportar planilha (CSV)</button>
     <button id="bClear" class="danger">Apagar todos os dados</button>
@@ -320,10 +360,60 @@ function setAuthMode(mode){
   authMessage('');
 }
 function showApp(user){currentUser=user;$('#authScreen').hidden=true;$('#financeApp').hidden=false;$('#userEmail').textContent=user.email||''}
+
+/* Assinatura: o painel só abre para quem tem assinatura ativa ou em teste */
+var assin=null,retorno=new URLSearchParams(location.search).get('assinatura');
+function payMsg(t){$('#payMsg').textContent=t||''}
+function limparUrl(){if(retorno){try{history.replaceState(null,'',location.pathname)}catch(e){}retorno=null}}
+async function lerAssinatura(){
+  var r=await sb.from('subscriptions').select('*').eq('user_id',currentUser.id).maybeSingle();
+  if(r.error)throw r.error;
+  assin=r.data;
+}
+function ativa(){return !!assin&&(assin.status==='active'||assin.status==='trialing')}
+var PRECOS_TELA={basico:{mensal:'R$ 9,90 por mês',anual:'R$ 99 por ano'},premium:{mensal:'R$ 19,90 por mês',anual:'R$ 199 por ano'}};
+function atualizarPrecos(){
+  var iv=document.querySelector('input[name="intervalo"]:checked').value;
+  $('#prB').textContent=PRECOS_TELA.basico[iv];$('#prP').textContent=PRECOS_TELA.premium[iv];
+}
+async function aguardarAssinatura(){
+  $('#payScreen').hidden=false;payMsg('Pagamento recebido! Liberando seu acesso...');
+  for(var i=0;i<10&&!ativa();i++){await new Promise(function(r){setTimeout(r,2000)});await lerAssinatura()}
+  $('#payScreen').hidden=true;
+}
+function mostrarPaywall(){
+  var primeira=!(assin&&assin.stripe_subscription_id);
+  $('#payBtn').textContent=primeira?'Começar 7 dias grátis':'Assinar agora';
+  $('#payTrial').hidden=!primeira;
+  $('#payManage').hidden=!(assin&&assin.stripe_customer_id);
+  $('#payEmail').textContent=currentUser.email||'';
+  if(retorno==='cancelada')payMsg('Você não concluiu a assinatura. Quando quiser, é só escolher um plano.');
+  else if(retorno==='ok')payMsg('Ainda estamos confirmando seu pagamento. Aguarde um minuto e clique em "Já assinei, verificar".');
+  else payMsg('');
+  atualizarPrecos();$('#payScreen').hidden=false;limparUrl();
+}
+async function chamarAssinatura(corpo){
+  var r=await sb.functions.invoke('assinatura',{body:corpo}),o=r.data;
+  if(r.error||!o||o.erro||!o.url){
+    var det=o&&o.erro;
+    if(!det&&r.error&&r.error.context&&r.error.context.json){try{var j=await r.error.context.json();det=j.erro}catch(x){}}
+    throw new Error(det||'Não foi possível abrir a página agora. Tente de novo.');
+  }
+  location.href=o.url;
+}
 async function startSession(session){
-  if(!session){currentUser=null;cloudReady=false;$('#financeApp').hidden=true;$('#authScreen').hidden=false;return}
-  currentUser=session.user;cloudReady=false;$('#financeApp').hidden=true;$('#authScreen').hidden=true;$('#userEmail').textContent=currentUser.email||'';
-  try{await loadCloud();cloudReady=true;$('#financeApp').hidden=false;R()}catch(err){console.error(err);cloudReady=false;currentUser=null;$('#financeApp').hidden=true;$('#authScreen').hidden=false;authMessage('Erro ao carregar seus dados. Confira as tabelas e políticas RLS do Supabase.')}
+  if(!session){currentUser=null;cloudReady=false;assin=null;$('#financeApp').hidden=true;$('#payScreen').hidden=true;$('#authScreen').hidden=false;return}
+  currentUser=session.user;cloudReady=false;
+  $('#financeApp').hidden=true;$('#authScreen').hidden=true;$('#payScreen').hidden=true;
+  $('#userEmail').textContent=currentUser.email||'';
+  try{
+    await lerAssinatura();
+    if(!ativa()&&retorno==='ok')await aguardarAssinatura();
+    if(!ativa()){mostrarPaywall();return}
+    await loadCloud();cloudReady=true;$('#financeApp').hidden=false;R();
+    if(retorno==='ok')toast('Assinatura confirmada! Bem-vindo(a).');
+    limparUrl();
+  }catch(err){console.error(err);cloudReady=false;currentUser=null;assin=null;$('#financeApp').hidden=true;$('#payScreen').hidden=true;$('#authScreen').hidden=false;authMessage('Erro ao carregar seus dados. Confira as tabelas e políticas RLS do Supabase.')}
 }
 $('#authToggle').onclick=function(){setAuthMode(authMode==='login'?'signup':'login')};
 $('#authForm').addEventListener('submit',async function(e){
@@ -358,7 +448,7 @@ if(sb){
       else if(np){toast('A senha precisa ter pelo menos 8 caracteres.')}
     }
     if(event==='SIGNED_IN'&&session&&!currentUser)startSession(session);
-    if(event==='SIGNED_OUT'){cloudReady=false;currentUser=null;limparLocal();$('#financeApp').hidden=true;$('#authScreen').hidden=false}
+    if(event==='SIGNED_OUT'){cloudReady=false;currentUser=null;assin=null;limparLocal();$('#financeApp').hidden=true;$('#payScreen').hidden=true;$('#authScreen').hidden=false}
   });
   sb.auth.getSession().then(function(r){if(r.data&&r.data.session)startSession(r.data.session);else{$('#financeApp').hidden=true;$('#authScreen').hidden=false}})
 }else{$('#financeApp').hidden=true;$('#authScreen').hidden=false;authMessage('Para ativar login e nuvem, configure as credenciais do Supabase no arquivo.')}
@@ -579,6 +669,31 @@ $('#bDemo').onclick=function(){
 
 Object.keys(CATS).forEach(function(k){['#fCt','#fCat'].forEach(function(id){var o=document.createElement('option');o.value=k;o.textContent=k;$(id).appendChild(o)})});
 var all=document.createElement('option');all.value='';all.textContent='Todas as categorias';$('#fCat').insertBefore(all,$('#fCat').firstChild);$('#fCat').value='';
+
+/* Tela de assinatura: botões */
+document.querySelectorAll('input[name="intervalo"]').forEach(function(i){i.onchange=atualizarPrecos});
+atualizarPrecos();
+$('#payBtn').onclick=async function(){
+  var b=this;b.disabled=true;payMsg('Abrindo o pagamento seguro...');
+  try{await chamarAssinatura({acao:'checkout',plano:document.querySelector('input[name="plano"]:checked').value,intervalo:document.querySelector('input[name="intervalo"]:checked').value})}
+  catch(err){payMsg(err.message);b.disabled=false}
+};
+async function abrirPortal(b){
+  b.disabled=true;
+  try{await chamarAssinatura({acao:'portal'})}
+  catch(err){payMsg(err.message);toast(err.message);b.disabled=false}
+}
+$('#payManage').onclick=function(){abrirPortal(this)};
+$('#bManage').onclick=function(){abrirPortal(this)};
+$('#payRecheck').onclick=function(){
+  payMsg('Verificando...');
+  sb.auth.getSession().then(function(r){
+    if(!(r.data&&r.data.session))return;
+    startSession(r.data.session).then(function(){if(!$('#payScreen').hidden)payMsg('Ainda não encontramos uma assinatura ativa. Se acabou de pagar, aguarde um minuto e tente de novo.')});
+  });
+};
+$('#payLogout').onclick=function(){if(sb)sb.auth.signOut()};
+
 setAuthMode('login');
 R();
 })();
