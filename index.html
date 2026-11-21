@@ -371,6 +371,7 @@ async function lerAssinatura(){
   assin=r.data;
 }
 function ativa(){return !!assin&&(assin.status==='active'||assin.status==='trialing')}
+function ehPremium(){return ativa()&&assin.plan==='premium'}
 var PRECOS_TELA={basico:{mensal:'R$ 9,90 por mês',anual:'R$ 99 por ano'},premium:{mensal:'R$ 19,90 por mês',anual:'R$ 199 por ano'}};
 function atualizarPrecos(){
   var iv=document.querySelector('input[name="intervalo"]:checked').value;
@@ -463,6 +464,7 @@ function delta(c,p){if(!p)return'Sem dados no mês anterior';var x=(c-p)/p*100;r
 
 function insights(c,p){
   var el=$('#insights');
+  if(!ehPremium()){el.hidden=false;el.innerHTML='<h2>Alertas e dicas</h2><p class="muted" style="margin:0">Disponível no plano Premium. Use “Gerenciar assinatura” para trocar de plano.</p>';return}
   if(!S.items.length){el.hidden=true;return}
   var L=[],tot=c.s;
   function add(n,cor,t){L.push({n:n,cor:cor,t:t})}
@@ -597,6 +599,7 @@ $('#iaForm').addEventListener('submit',async function(e){
   var texto=$('#iaTexto').value.trim(),msg=$('#iaMsg');
   if(!texto){msg.textContent='Escreva uma frase, por exemplo: gastei 40 no mercado.';return}
   if(!sb||!currentUser||!cloudReady){msg.textContent='Faça login para usar a IA.';return}
+  if(!ehPremium()){msg.className='muted';msg.textContent='A IA é um recurso do plano Premium. Use “Gerenciar assinatura” para trocar de plano.';return}
   $('#iaBtn').disabled=true;msg.className='muted';msg.textContent='Entendendo sua frase...';
   try{
     var r=await sb.functions.invoke('parse-lancamento',{body:{texto:texto,hoje:hoje()}});
